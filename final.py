@@ -9,6 +9,9 @@ import os
 
 from sklearn.decomposition import PCA
 
+from sklearn.ensemble import ExtraTreesRegressor
+from sklearn.neighbors import KNeighborsRegressor
+
 training_dir = './data/train'
 
 def read_train_data(train_dir):
@@ -150,6 +153,12 @@ def calc_fft(waveforms):
 
 	return ffts
 
+def train_regressor(labels, fingerprints, train_set):
+	pass
+	#https://scikit-learn.org/stable/auto_examples/plot_multioutput_face_completion.html#sphx-glr-auto-examples-plot-multioutput-face-completion-py
+
+def eval_regressor(labels, fingerprints, val_set):
+	pass
 
 # list for storing feature names 
 fingerprint_features = []
