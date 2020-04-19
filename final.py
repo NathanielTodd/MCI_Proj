@@ -96,7 +96,7 @@ def plot_single_feature(fingerprints, labels, fingerprint_features, feature_inde
 	ax.set_xlabel('X')
 	ax.set_ylabel('Y')
 	ax.set_zlabel(fingerprint_features[feature_index])
-	plt.show()
+	# plt.show()
 
 def isolate_audio_pulse(waveform):
 
