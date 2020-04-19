@@ -10,7 +10,9 @@ import os
 from sklearn.decomposition import PCA
 
 from sklearn.ensemble import ExtraTreesRegressor
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.neighbors import KNeighborsRegressor
+from sklearn.multioutput import MultiOutputRegressor
 
 training_dir = './data/train'
 
@@ -140,25 +142,59 @@ def calc_fft(waveforms):
 	ffts = {}
 	for i in range(1,len(waveforms)+1):
 		ffts[i] = np.fft.fft(waveforms[i])
-		print(ffts[i].real.shape)
-
+		
 		# -------------------------------------
 		# uncomment below to plot ffts
 		# -------------------------------------
-		fig, axs = plt.subplots(2)
-		fig.suptitle(i)
-		axs[0].plot(ffts[i].real)
-		axs[1].plot(ffts[i].imag)
-		plt.show()
+		# print(ffts[i].real.shape)
+		# fig, axs = plt.subplots(2)
+		# fig.suptitle(i)
+		# axs[0].plot(ffts[i].real)
+		# axs[1].plot(ffts[i].imag)
+		# plt.show()
 
 	return ffts
 
-def train_regressor(labels, fingerprints, train_set):
-	pass
-	#https://scikit-learn.org/stable/auto_examples/plot_multioutput_face_completion.html#sphx-glr-auto-examples-plot-multioutput-face-completion-py
+def train_regressor(fingerprints, labels, train_set):
+	max_depth = 30
+	regr_multirf = MultiOutputRegressor(RandomForestRegressor(n_estimators=100,
+	                                                          max_depth=max_depth,
+	                                                          random_state=0))
+	X = []
+	y = []
+	for i in train_set:
+		X.append(fingerprints[i])
+		y.append(labels[i])
 
-def eval_regressor(labels, fingerprints, val_set):
-	pass
+	regr_multirf.fit(X, y)
+
+	return regr_multirf
+
+def eval_regressor(regressor, fingerprints, labels, val_set):
+	
+	results = {}
+	predictions = {}
+	for i in val_set:
+		x_val = np.asarray(fingerprints[i])
+		y_val = regressor.predict(x_val.reshape(1, -1))
+		
+		results[i] = [
+			labels[i], 
+			(y_val[0][0],y_val[0][1]),
+			(labels[i][0] - y_val[0][0],labels[i][1] - y_val[0][1])
+			]
+
+		predictions[i] = (y_val[0][0],y_val[0][1])
+
+		# -------------------------------------
+		# uncomment below to print val results
+		# -------------------------------------
+		# print(f"Example {i} ground gruth: {labels[i]}")
+		# print(f"Example {i} prediction : {(y_val[0][0],y_val[0][1])}")
+		# print(f"Example {i} difference: {(labels[i][0] - y_val[0][0],labels[i][1] - y_val[0][1])}")
+		# print('-'*52)
+
+	return results, predictions
 
 # list for storing feature names 
 fingerprint_features = []
@@ -190,7 +226,16 @@ fingerprint_features.append('Variance')
 
 ffts = calc_fft(raw_waveforms)
 
-#lot_ffts()
 #TODO add fft max?
 # ffts_features = calc_fft_features(files,ffts)
 
+# generate permutation of indices for eval and test sets
+index_permuation = np.random.permutation(np.arange(1,61))
+test_indices, val_indices = index_permuation[:40], index_permuation[41:]
+
+regressor = train_regressor(fingerprints, labels, test_indices)
+
+# output[i] is data of ith example.
+# results format: list [ ground truth tuple, prediction tuple, diff tuple]
+# prediction format: list [prediction tuple]
+results, predictions = eval_regressor(regressor, fingerprints, labels, val_indices)
