@@ -1,5 +1,6 @@
 import numpy as np
 import csv
+import math
 
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  
@@ -118,7 +119,7 @@ def calc_positive_means(fingerprints, waveforms):
 	for i in range(1,len(waveforms)+1):
 		fingerprints[i].append(np.mean(np.absolute(waveforms[i])))
 
-# Function calculates mean of absolute value of audio signals
+# Function calculates max value of audio signals
 def calc_maxs(fingerprints, waveforms):
 
 	for i in range(1,len(waveforms)+1):
@@ -155,11 +156,17 @@ def calc_fft(waveforms):
 
 	return ffts
 
+def calc_ffts_max_real(fingerprints, ffts):
+	for i in range(1, len(ffts) + 1):
+		fingerprints[i].append(np.max(ffts[i]).real)
+
 def train_regressor(fingerprints, labels, train_set):
 	max_depth = 30
 	regr_multirf = MultiOutputRegressor(RandomForestRegressor(n_estimators=100,
 	                                                          max_depth=max_depth,
 	                                                          random_state=0))
+
+	
 	X = []
 	y = []
 	for i in train_set:
@@ -196,6 +203,45 @@ def eval_regressor(regressor, fingerprints, labels, val_set):
 
 	return results, predictions
 
+# use KNeighborsRegressor 
+def train_knn_regressor(fingerprints, labels, train_set):
+	neigh = KNeighborsRegressor(n_neighbors=3)
+
+	X = []
+	y = []
+	for i in train_set:
+		X.append(fingerprints[i])
+		y.append(labels[i])
+
+	neigh.fit(X, y)
+
+	return neigh
+
+def eval_knn_regressor(regressor, fingerprints, labels, val_set):
+	results = {}
+	predictions = {}
+	for i in val_set:
+		x_val = np.asarray(fingerprints[i])
+		y_val = regressor.kneighbors(x_val.reshape(1, -1))
+		y_val_x_mean = 0.0
+		y_val_y_mean = 0.0
+		for val in y_val[1]:
+			for v, i in enumerate(val):
+				y_val_x_mean += labels[v][0]
+				y_val_y_mean += labels[v][1]
+		y_val_x_mean /= 3
+		y_val_y_mean /= 3
+
+		results[i] = [
+			labels[i], 
+			(y_val_x_mean,y_val_y_mean),
+			(labels[i][0] - y_val_x_mean,labels[i][1] - y_val_y_mean)
+			]
+
+		predictions[i] = (y_val_x_mean,y_val_y_mean)
+
+	return results, predictions
+
 # list for storing feature names 
 fingerprint_features = []
 filenames, fingerprints, raw_waveforms, iso_waveforms, norm_waveforms, labels = read_train_data(training_dir)
@@ -226,8 +272,10 @@ fingerprint_features.append('Variance')
 
 ffts = calc_fft(raw_waveforms)
 
-#TODO add fft max?
+#TODO add fft max? (add fft max real part)
 # ffts_features = calc_fft_features(files,ffts)
+calc_ffts_max_real(fingerprints, ffts)
+fingerprint_features.append('ffts_max')
 
 # generate permutation of indices for eval and test sets
 index_permuation = np.random.permutation(np.arange(1,61))
@@ -239,3 +287,24 @@ regressor = train_regressor(fingerprints, labels, test_indices)
 # results format: list [ ground truth tuple, prediction tuple, diff tuple]
 # prediction format: list [prediction tuple]
 results, predictions = eval_regressor(regressor, fingerprints, labels, val_indices)
+
+
+print (fingerprint_features)
+mean_dis_error = 0.0
+for result in results.items():
+	distance = math.sqrt(result[1][2][0] ** 2 + result[1][2][1] **2)
+	mean_dis_error += distance
+
+print ("mean_dis_error", mean_dis_error / len(results.items()))
+
+# use Knn regressor 
+# knn_regressor = train_knn_regressor(fingerprints, labels, test_indices)
+# knn_results, knn_predictions = eval_knn_regressor(knn_regressor, fingerprints, labels, val_indices)
+
+# mean_dis_error = 0.0
+# for result in knn_results.items():
+# 	 print (result)
+#	 distance = math.sqrt(result[1][2][0] ** 2 + result[1][2][1] **2)
+#	 mean_dis_error += distance
+
+# print ("knn_mean_dis_error", mean_dis_error / len(results.items()))
