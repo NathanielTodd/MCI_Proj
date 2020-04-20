@@ -158,7 +158,7 @@ def calc_fft(waveforms):
 
 def calc_ffts_max_real(fingerprints, ffts):
 	for i in range(1, len(ffts) + 1):
-		fingerprints[i].append(np.max(ffts[i]).real)
+		fingerprints[i].append(np.argmax(ffts[i]).real)
 
 def train_regressor(fingerprints, labels, train_set):
 	max_depth = 30
@@ -170,6 +170,7 @@ def train_regressor(fingerprints, labels, train_set):
 	X = []
 	y = []
 	for i in train_set:
+		print (fingerprints[i])
 		X.append(fingerprints[i])
 		y.append(labels[i])
 
