@@ -53,7 +53,7 @@ def read_train_data(train_dir):
 			# fig, axs = plt.subplots(2)
 			# fig.suptitle(filename)
 			# axs[0].plot(data)
-			# axs[1].plot(waveforms[filenum])
+			# axs[1].plot(norm_waveforms[filenum])
 			# plt.show()
 
 		elif filename.endswith('.csv'):
@@ -107,6 +107,17 @@ def isolate_audio_pulse(waveform):
 
 	return waveform[peak-250:peak+16000]
 
+def split_waveforms(waveforms):
+
+	pulses = {}
+	echoes = {}
+
+	for i in range(1,len(waveforms)+1):
+		pulses[i] = waveforms[i][:400] 
+		echoes[i] = waveforms[i][401:]
+
+	return pulses, echoes
+
 # Function calculates mean of audio signals
 def calc_means(fingerprints, waveforms):
 
@@ -148,17 +159,17 @@ def calc_fft(waveforms, fs):
 	ffts = {}
 	for i in range(1,len(waveforms)+1):
 		fft = np.fft.fft(waveforms[i])
-		ffts[i] = (fft/np.linalg.norm(fft))[20000:95000]
+		ffts[i] = (fft/np.linalg.norm(fft))
 		
 		# -------------------------------------
 		# uncomment below to plot ffts
 		# -------------------------------------
-		# print(ffts[i].real.shape, fs)
-		# fig, axs = plt.subplots(2)
-		# fig.suptitle(i)
-		# axs[0].plot(ffts[i].real)
-		# axs[1].plot(ffts[i].imag)
-		# plt.show()
+		print(ffts[i].real.shape, fs)
+		fig, axs = plt.subplots(2)
+		fig.suptitle(i)
+		axs[0].plot(ffts[i].real)
+		axs[1].plot(ffts[i].imag)
+		plt.show()
 
 	return ffts
 
@@ -247,82 +258,51 @@ def eval_regressor(regressor, fingerprints, labels, val_set):
 
 	return results, predictions
 
-# use KNeighborsRegressor 
-def train_knn_regressor(fingerprints, labels, train_set):
-	neigh = KNeighborsRegressor(n_neighbors=3)
-
-	X = []
-	y = []
-	for i in train_set:
-		X.append(fingerprints[i])
-		y.append(labels[i])
-
-	neigh.fit(X, y)
-
-	return neigh
-
-def eval_knn_regressor(regressor, fingerprints, labels, val_set):
-	results = {}
-	predictions = {}
-	for i in val_set:
-		x_val = np.asarray(fingerprints[i])
-		y_val = regressor.kneighbors(x_val.reshape(1, -1))
-		y_val_x_mean = 0.0
-		y_val_y_mean = 0.0
-		for val in y_val[1]:
-			for v, i in enumerate(val):
-				y_val_x_mean += labels[v][0]
-				y_val_y_mean += labels[v][1]
-		y_val_x_mean /= 3
-		y_val_y_mean /= 3
-
-		results[i] = [
-			labels[i], 
-			(y_val_x_mean,y_val_y_mean),
-			(labels[i][0] - y_val_x_mean,labels[i][1] - y_val_y_mean)
-			]
-
-		predictions[i] = (y_val_x_mean,y_val_y_mean)
-
-	return results, predictions
-
-# list for storing feature names 
+# ******************************************
+# Read in waveform data
+# ------------------------------------------
+# stores names of features for plotting
 fingerprint_features = []
 filenames, fingerprints, raw_waveforms, iso_waveforms, norm_waveforms, labels, fs = read_train_data(training_dir)
 
+iso_pulse_waveforms, iso_echo_waveforms = split_waveforms(iso_waveforms)
+pulse_waveforms, echo_waveforms = split_waveforms(norm_waveforms)
+
+
 # ******************************************
-# Vairous Features
+# Various waveform Features
 # ------------------------------------------
 # not quite as clear maybe remove
 # calc_means(fingerprints, norm_waveforms)
 # fingerprint_features.append('Means')
 
-calc_positive_means(fingerprints, norm_waveforms)
-fingerprint_features.append('Means of Postive waveform')
+# calc_positive_means(fingerprints, norm_waveforms)
+# fingerprint_features.append('Means of Postive waveform')
 
-calc_maxs(fingerprints, norm_waveforms)
-fingerprint_features.append('Maxs')
+# calc_signal_energy(fingerprints, iso_waveforms)
+# fingerprint_features.append('calc_signal_energy')
 
-#not quite as clear maybe remove
-calc_stds(fingerprints, norm_waveforms)
-fingerprint_features.append('Standard Deviations')
+# calc_maxs(fingerprints, norm_waveforms)
+# fingerprint_features.append('Maxs')
 
-calc_vars(fingerprints, norm_waveforms)
-fingerprint_features.append('Variance')
+# #not quite as clear maybe remove
+# calc_stds(fingerprints, norm_waveforms)
+# fingerprint_features.append('Standard Deviations')
 
-calc_signal_energy(fingerprints, iso_waveforms)
-fingerprint_features.append('calc_signal_energy')
+# calc_vars(fingerprints, norm_waveforms)
+# fingerprint_features.append('Variance')
+
 
 # ******************************************
 # FFT Features
 # ------------------------------------------
-ffts = calc_fft(raw_waveforms, fs)
+# ffts = calc_fft(raw_waveforms, fs)
 
-calc_ffts_max_real(fingerprints, ffts, 5)
-fingerprint_features.append('max_freq')
+# calc_ffts_max_real(fingerprints, ffts, 5)
+# fingerprint_features.append('max_freq')
 
-calc_ffts_max_imag(fingerprints, ffts, 5)
-fingerprint_features.append('max_phase')
+# calc_ffts_max_imag(fingerprints, ffts, 5)
+# fingerprint_features.append('max_phase')
 
 #PCA with ffts
 # fft_real_pca = fft_real_fit_PCA(ffts,3)
@@ -334,11 +314,57 @@ fingerprint_features.append('max_phase')
 # fft_imag_dim_reduce(fingerprints, ffts, fft_imag_pca)
 # fingerprint_features.append('ffts_imag_dim_reduction')
 
+# ******************************************
+# Pulse, Echo waveform Features
+# ------------------------------------------
+# not quite as clear maybe remove
+# calc_means(fingerprints, norm_waveforms)
+# fingerprint_features.append('Means')
+
+calc_positive_means(fingerprints, pulse_waveforms)
+fingerprint_features.append('Means of Postive Pulse')
+calc_positive_means(fingerprints, echo_waveforms)
+fingerprint_features.append('Means of Postive Echo')
+
+# calc_signal_energy(fingerprints, iso_pulse_waveforms)
+# fingerprint_features.append('Signal Energy of Pulses')
+calc_signal_energy(fingerprints, iso_echo_waveforms)
+fingerprint_features.append('Signal Energy of Echo')
+
+calc_maxs(fingerprints, pulse_waveforms)
+fingerprint_features.append('Pulse Maxs')
+calc_maxs(fingerprints, echo_waveforms)
+fingerprint_features.append('Echo Maxs')
+
+#not quite as clear maybe remove
+calc_stds(fingerprints, pulse_waveforms)
+fingerprint_features.append('Pulse Standard Deviations')
+calc_stds(fingerprints, echo_waveforms)
+fingerprint_features.append('Echo Standard Deviations')
+
+calc_vars(fingerprints, pulse_waveforms)
+fingerprint_features.append('Pulse Variance')
+calc_vars(fingerprints, echo_waveforms)
+fingerprint_features.append('Echo Variance')
+
+# ******************************************
+# Pulse echo FFT Features
+# ------------------------------------------
+# fft of pulses not very meaningful
+# ffts = calc_fft(pulse_waveforms, fs)
+ffts = calc_fft(echo_waveforms, fs)
+
+# calc_ffts_max_real(fingerprints, ffts, 5)
+# fingerprint_features.append('max_freq')
+
+# calc_ffts_max_imag(fingerprints, ffts, 5)
+# fingerprint_features.append('max_phase')
 
 # ******************************************
 # Plot Specific Feature
-# -----------------------------------------4
-# plot_single_feature(fingerprints, labels, fingerprint_features, feature_index=4)
+# -----------------------------------------
+# for i in range():
+# 	plot_single_feature(fingerprints, labels, fingerprint_features, feature_index=i)
 
 
 # ******************************************
@@ -354,11 +380,6 @@ regressor = train_regressor(fingerprints, labels, test_indices)
 # results format: list [ ground truth tuple, prediction tuple, diff tuple]
 # prediction format: list [prediction tuple]
 results, predictions = eval_regressor(regressor, fingerprints, labels, val_indices)
-
-# use Knn regressor 
-# knn_regressor = train_knn_regressor(fingerprints, labels, test_indices)
-# knn_results, knn_predictions = eval_knn_regressor(knn_regressor, fingerprints, labels, val_indices)
-
 
 # ******************************************
 # Result Prints
