@@ -72,7 +72,7 @@ def read_train_data(train_dir):
 					filenum = int(num_dot_wav.split('.')[0])
 					labels[filenum] = (float(row[1]),float(row[2]))
 
-	return filenames, fingerprints, raw_waveforms, iso_waveforms, norm_waveforms, labels
+	return filenames, fingerprints, raw_waveforms, iso_waveforms, norm_waveforms, labels, fs
 
 def plot_single_feature(fingerprints, labels, fingerprint_features, feature_index=0):
 
@@ -99,13 +99,13 @@ def plot_single_feature(fingerprints, labels, fingerprint_features, feature_inde
 	ax.set_xlabel('X')
 	ax.set_ylabel('Y')
 	ax.set_zlabel(fingerprint_features[feature_index])
-	# plt.show()
+	plt.show()
 
 def isolate_audio_pulse(waveform):
 
 	peak = np.argmax(waveform)
 
-	return waveform[peak-250:peak+8000]
+	return waveform[peak-250:peak+16000]
 
 # Function calculates mean of audio signals
 def calc_means(fingerprints, waveforms):
@@ -137,17 +137,23 @@ def calc_vars(fingerprints, waveforms):
 	for i in range(1,len(waveforms)+1):
 		fingerprints[i].append(np.var(np.absolute(waveforms[i])))
 
+def calc_signal_energy(fingerprints, waveforms):
+
+	for i in range(1,len(waveforms)+1):
+		fingerprints[i].append( np.sum(waveforms[i]**2))
+
 # calculate fft of audio files
-def calc_fft(waveforms):
+def calc_fft(waveforms, fs):
 
 	ffts = {}
 	for i in range(1,len(waveforms)+1):
-		ffts[i] = np.fft.fft(waveforms[i])
+		fft = np.fft.fft(waveforms[i])
+		ffts[i] = (fft/np.linalg.norm(fft))[20000:95000]
 		
 		# -------------------------------------
 		# uncomment below to plot ffts
 		# -------------------------------------
-		# print(ffts[i].real.shape)
+		# print(ffts[i].real.shape, fs)
 		# fig, axs = plt.subplots(2)
 		# fig.suptitle(i)
 		# axs[0].plot(ffts[i].real)
@@ -156,9 +162,47 @@ def calc_fft(waveforms):
 
 	return ffts
 
-def calc_ffts_max_real(fingerprints, ffts):
+def fft_real_fit_PCA(ffts,n):
+	pca = PCA(n_components=n)
+
+	X = []
 	for i in range(1, len(ffts) + 1):
-		fingerprints[i].append(np.argmax(ffts[i]).real)
+		fft = ffts[i].real
+		print(fft.shape)
+		X.append(fft)
+
+	return pca.fit(np.stack(X))
+
+def fft_imag_fit_PCA(ffts,n):
+	pca = PCA(n_components=n)
+
+	X = []
+	for i in range(1, len(ffts) + 1):
+		X.append(ffts[i].imag)
+
+	return pca.fit(np.stack(X))
+
+def fft_real_dim_reduce(fingerprints, ffts, pca):
+
+	for i in range(1, len(ffts) + 1):
+		fingerprints[i] += list(pca.transform(ffts[i].real.reshape(1,-1)).flatten())
+
+def fft_imag_dim_reduce(fingerprints, ffts, pca):
+
+	for i in range(1, len(ffts) + 1):
+		fingerprints[i] += list(pca.transform(ffts[i].imag.reshape(1,-1)).flatten())
+
+def calc_ffts_max_real(fingerprints, ffts,n):
+
+	for i in range(1, len(ffts) + 1):
+		max_freqs = np.argsort(np.absolute(ffts[i].real))
+		fingerprints[i] += list(max_freqs[0:n])
+
+def calc_ffts_max_imag(fingerprints, ffts,n):
+
+	for i in range(1, len(ffts) + 1):
+		max_phases = np.argsort(np.absolute(ffts[i].imag))
+		fingerprints[i] += list(max_phases[0:n])
 
 def train_regressor(fingerprints, labels, train_set):
 	max_depth = 30
@@ -170,7 +214,6 @@ def train_regressor(fingerprints, labels, train_set):
 	X = []
 	y = []
 	for i in train_set:
-		print (fingerprints[i])
 		X.append(fingerprints[i])
 		y.append(labels[i])
 
@@ -197,10 +240,10 @@ def eval_regressor(regressor, fingerprints, labels, val_set):
 		# -------------------------------------
 		# uncomment below to print val results
 		# -------------------------------------
-		# print(f"Example {i} ground gruth: {labels[i]}")
-		# print(f"Example {i} prediction : {(y_val[0][0],y_val[0][1])}")
-		# print(f"Example {i} difference: {(labels[i][0] - y_val[0][0],labels[i][1] - y_val[0][1])}")
-		# print('-'*52)
+		print(f"Example {i} ground gruth: {labels[i]}")
+		print(f"Example {i} prediction : ({y_val[0][0]:.4f},{y_val[0][1]:.4f})")
+		print(f"Example {i} difference: ({labels[i][0] - y_val[0][0]:.4f},{labels[i][1] - y_val[0][1]:.4f})")
+		print('-'*52)
 
 	return results, predictions
 
@@ -245,11 +288,14 @@ def eval_knn_regressor(regressor, fingerprints, labels, val_set):
 
 # list for storing feature names 
 fingerprint_features = []
-filenames, fingerprints, raw_waveforms, iso_waveforms, norm_waveforms, labels = read_train_data(training_dir)
+filenames, fingerprints, raw_waveforms, iso_waveforms, norm_waveforms, labels, fs = read_train_data(training_dir)
 
+# ******************************************
+# Vairous Features
+# ------------------------------------------
 # not quite as clear maybe remove
-calc_means(fingerprints, norm_waveforms)
-fingerprint_features.append('Means')
+# calc_means(fingerprints, norm_waveforms)
+# fingerprint_features.append('Means')
 
 calc_positive_means(fingerprints, norm_waveforms)
 fingerprint_features.append('Means of Postive waveform')
@@ -264,23 +310,43 @@ fingerprint_features.append('Standard Deviations')
 calc_vars(fingerprints, norm_waveforms)
 fingerprint_features.append('Variance')
 
-#plot_single_feature(fingerprints, labels, fingerprint_features, feature_index=3)
+calc_signal_energy(fingerprints, iso_waveforms)
+fingerprint_features.append('calc_signal_energy')
 
-#TODO
-# add vectorized window average to fingerprints?
-# probably not the best idea, basically blurring the signal
-# will remove channel characteristics which is my guess and we want those
+# ******************************************
+# FFT Features
+# ------------------------------------------
+ffts = calc_fft(raw_waveforms, fs)
 
-ffts = calc_fft(raw_waveforms)
+calc_ffts_max_real(fingerprints, ffts, 5)
+fingerprint_features.append('max_freq')
 
-#TODO add fft max? (add fft max real part)
-# ffts_features = calc_fft_features(files,ffts)
-calc_ffts_max_real(fingerprints, ffts)
-fingerprint_features.append('ffts_max')
+calc_ffts_max_imag(fingerprints, ffts, 5)
+fingerprint_features.append('max_phase')
 
+#PCA with ffts
+# fft_real_pca = fft_real_fit_PCA(ffts,3)
+# fft_imag_pca = fft_imag_fit_PCA(ffts,3)
+
+# fft_real_dim_reduce(fingerprints, ffts, fft_real_pca)
+# fingerprint_features.append('ffts_real_dim_reduction')
+
+# fft_imag_dim_reduce(fingerprints, ffts, fft_imag_pca)
+# fingerprint_features.append('ffts_imag_dim_reduction')
+
+
+# ******************************************
+# Plot Specific Feature
+# -----------------------------------------4
+# plot_single_feature(fingerprints, labels, fingerprint_features, feature_index=4)
+
+
+# ******************************************
+# Regressor Stuff
+# ------------------------------------------
 # generate permutation of indices for eval and test sets
 index_permuation = np.random.permutation(np.arange(1,61))
-test_indices, val_indices = index_permuation[:40], index_permuation[41:]
+test_indices, val_indices = index_permuation[:42], index_permuation[43:]
 
 regressor = train_regressor(fingerprints, labels, test_indices)
 
@@ -289,18 +355,21 @@ regressor = train_regressor(fingerprints, labels, test_indices)
 # prediction format: list [prediction tuple]
 results, predictions = eval_regressor(regressor, fingerprints, labels, val_indices)
 
+# use Knn regressor 
+# knn_regressor = train_knn_regressor(fingerprints, labels, test_indices)
+# knn_results, knn_predictions = eval_knn_regressor(knn_regressor, fingerprints, labels, val_indices)
 
-print (fingerprint_features)
+
+# ******************************************
+# Result Prints
+# ------------------------------------------
+# print (fingerprint_features)
 mean_dis_error = 0.0
 for result in results.items():
 	distance = math.sqrt(result[1][2][0] ** 2 + result[1][2][1] **2)
 	mean_dis_error += distance
 
 print ("mean_dis_error", mean_dis_error / len(results.items()))
-
-# use Knn regressor 
-# knn_regressor = train_knn_regressor(fingerprints, labels, test_indices)
-# knn_results, knn_predictions = eval_knn_regressor(knn_regressor, fingerprints, labels, val_indices)
 
 # mean_dis_error = 0.0
 # for result in knn_results.items():
