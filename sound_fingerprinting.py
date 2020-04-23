@@ -477,4 +477,4 @@ if __name__ == '__main__':
 	
 	regressor = train('./data/train')
 
-	test('./data/test', regressor)
+	test('./data/0_Data_RADAR', regressor)
