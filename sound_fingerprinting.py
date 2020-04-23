@@ -471,7 +471,7 @@ def test(test_dir, regressor):
 	path = os.path.join(test_dir, "results.txt")
 	with open(path, 'w') as file:
 		for i in range(1,len(predictions)+1):
-			file.write(f'{filenames[i]} prediction: {predictions[i]}\n')
+			file.write(f'{filenames[i]} prediction: ({predictions[i][0]:.4f},{predictions[i][1]:.4f})\n')
 
 if __name__ == '__main__':
 	
