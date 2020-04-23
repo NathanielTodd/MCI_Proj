@@ -108,8 +108,11 @@ def split_waveforms(waveforms):
 	echoes = {}
 
 	for i in range(1,len(waveforms)+1):
-		pulses[i] = waveforms[i][:400] 
-		echoes[i] = waveforms[i][401:]
+
+		peak = np.argmax(waveforms[i])
+
+		pulses[i] = waveforms[i][:(peak+225)] 
+		echoes[i] = waveforms[i][(peak+226):]
 
 	return pulses, echoes
 
